@@ -27,26 +27,49 @@
       status.appendChild(el);
     };
 
-    // 1. Проверяем, что swagger.yaml доступен (относительный путь!)
-    fetch('swagger.yaml')
-      .then(res => {
+    let specJson = null;
+
+    // 1. Загружаем swagger.yaml и парсим в JSON
+    Promise.all([
+      loadYamlParser(),
+      fetch('swagger.yaml').then(res => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.text();
       })
-      .then(yaml => {
-        log(`✅ swagger.yaml загружен (${yaml.length} байт)`, 'ok');
-        loadRedoc();
+    ])
+      .then(([jsyaml, yamlText]) => {
+        log(`✅ swagger.yaml загружен (${yamlText.length} байт)`, 'ok');
+        specJson = jsyaml.load(yamlText);
+        log('✅ YAML распарсен в JSON', 'ok');
+        return loadRedoc();
+      })
+      .then(() => {
+        if (specJson && window.Redoc) {
+          initRedoc(specJson);
+        }
       })
       .catch(err => {
-        log(`❌ Не удалось загрузить swagger.yaml: ${err.message}`, 'error');
+        log(`❌ Ошибка: ${err.message}`, 'error');
         log('💡 Попробуй открыть напрямую: <a href="swagger.yaml" target="_blank">swagger.yaml</a>', 'info');
       });
 
+    function loadYamlParser() {
+      return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/js-yaml@latest/dist/js-yaml.min.js';
+        script.onload = () => {
+          log('✅ js-yaml загружен', 'ok');
+          resolve(window.jsyaml);
+        };
+        script.onerror = () => reject(new Error('Не удалось загрузить js-yaml'));
+        document.head.appendChild(script);
+      });
+    }
+
     function loadRedoc() {
-      // Если Redoc уже загружен — инициируем
+      // Если Redoc уже загружен — возвращаем Promise
       if (window.Redoc) {
-        initRedoc();
-        return;
+        return Promise.resolve();
       }
 
       // Список CDN для загрузки (пробуем по очереди)
@@ -60,45 +83,45 @@
       const tryLoad = () => {
         if (idx >= cdns.length) {
           log('❌ Не удалось загрузить Redoc ни с одного CDN', 'error');
-          return;
+          return Promise.reject(new Error('Redoc не загружен'));
         }
         const src = cdns[idx++];
         log(`⏳ Загрузка Redoc с ${src}...`);
-        
-        const script = document.createElement('script');
-        script.src = src;
-        script.onload = () => {
-          log(`✅ Redoc загружен с ${src}`, 'ok');
-          initRedoc();
-        };
-        script.onerror = () => {
-          log(`⚠️ Ошибка загрузки с ${src}, пробуем следующий...`, 'info');
-          tryLoad();
-        };
-        document.head.appendChild(script);
+
+        return new Promise((resolve, reject) => {
+          const script = document.createElement('script');
+          script.src = src;
+          script.onload = () => {
+            log(`✅ Redoc загружен с ${src}`, 'ok');
+            resolve();
+          };
+          script.onerror = () => {
+            log(`⚠️ Ошибка загрузки с ${src}, пробуем следующий...`, 'info');
+            tryLoad().then(resolve).catch(reject);
+          };
+          document.head.appendChild(script);
+        });
       };
-      tryLoad();
+      return tryLoad();
     }
 
-    function initRedoc() {
+    function initRedoc(spec) {
       try {
         log('🚀 Инициализация Redoc...');
-        // Относительный путь — работает на GitHub Pages без проблем
-        const initResult = Redoc.init('swagger.yaml', {
+        const initResult = Redoc.init(spec, {
           theme: {
             typography: { fontSize: '14px', lineHeight: '1.5' },
             colors: { primary: { main: '#2563eb' } }
           },
           hideHostname: false
         }, document.getElementById('redoc-container'));
-        
+
         // Redoc.init может возвращать Promise (не во всех версиях)
         if (initResult && typeof initResult.then === 'function') {
           initResult
             .then(() => log('✅ Документация отображена', 'ok'))
             .catch(e => log(`❌ Ошибка рендеринга: ${e.message || e}`, 'error'));
         } else {
-          // Если Promise не возвращён — считаем успешным
           log('✅ Документация отображена', 'ok');
         }
       } catch (e) {
