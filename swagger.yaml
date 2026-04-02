@@ -1,114 +1,401 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-  <meta charset="UTF-8">
-  <title>Progress NW Catalog API</title>
-  <style>
-    body { font-family: system-ui, sans-serif; margin: 0; padding: 1rem; background: #f8fafc; }
-    .msg { padding: 1rem; margin: 1rem 0; border-radius: 6px; border-left: 4px solid #64748b; background: white; }
-    .msg.error { border-left-color: #dc2626; background: #fef2f2; }
-    .msg.ok { border-left-color: #16a34a; background: #f0fdf4; }
-    #redoc-container { margin-top: 1rem; }
-  </style>
-</head>
-<body>
-  <h1>📦 Progress NW Catalog API</h1>
-  <div id="status"></div>
-  <div id="redoc-container"></div>
+openapi: 3.0.3
+info:
+  title: Progress NW Catalog API
+  description: |
+    API каталога вентиляционного оборудования.
+    Оптимизировано для:
+    - Синхронизации с 1С (номенклатура, остатки, цены)
+    - Векторного поиска (RAG-ассистенты, чат-боты)
+    - Гибкой фильтрации по разнородным характеристикам
+  version: 1.0.0
+  contact:
+    email: api@progress-nw.ru
 
-  <script>
-    const status = document.getElementById('status');
-    const log = (msg, type = 'info') => {
-      console.log(`[LOG] ${msg}`);
-      const el = document.createElement('div');
-      el.className = `msg ${type}`;
-      el.innerHTML = msg;
-      status.appendChild(el);
-    };
+# 🌍 Базовые URL. Меняется при деплое на staging/production.
+servers:
+  - url: https://progress-nw.ru/api/v1
+    description: Production
 
-    // 1. Проверяем доступность swagger.yaml
-    fetch('swagger.yaml')
-      .then(res => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.text();
-      })
-      .then(yaml => {
-        log(`✅ swagger.yaml загружен (${yaml.length} байт)`, 'ok');
-        loadRedoc();
-      })
-      .catch(err => {
-        log(`❌ Не удалось загрузить swagger.yaml: ${err.message}`, 'error');
-        log(`💡 Попробуй открыть напрямую: <a href="swagger.yaml" target="_blank">swagger.yaml</a>`, 'info');
-      });
+# 🔐 Глобальная защита. Требует API-Key во всех запросах.
+security:
+  - ApiKeyAuth: []
 
-    function loadRedoc() {
-      if (window.Redoc) {
-        initRedoc();
-        return;
-      }
+components:
+  # === АУТЕНТИФИКАЦИЯ ===
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: |
+        Ключ доступа. Передаётся в заголовке каждого запроса.
+        Генерируется в админке сайта. Не передавать в URL (логируются сервером).
 
-      const cdns = [
-        'https://cdn.jsdelivr.net/npm/redoc@latest/bundles/redoc.standalone.js',
-        'https://unpkg.com/redoc@latest/bundles/redoc.standalone.js',
-        'https://cdnjs.cloudflare.com/ajax/libs/redoc/2.1.5/bundles/redoc.standalone.js'
-      ];
+  schemas:
+    # === СТАТУС ТОВАРА ===
+    ProductStatus:
+      type: string
+      enum: [active, archived]
+      maxLength: 20
+      example: active
+      # 🎯 active: отображается в каталоге, участвует в поиске
+      # 🎯 archived: скрыт из публичного каталога, но доступен по прямой ссылке
 
-      let idx = 0;
-      const tryLoad = () => {
-        if (idx >= cdns.length) {
-          log('❌ Не удалось загрузить Redoc ни с одного CDN', 'error');
-          return;
-        }
-        const src = cdns[idx++];
-        log(`⏳ Загрузка Redoc с ${src}...`);
+    # === ССЫЛКА НА КАТЕГОРИЮ ===
+    CategoryRef:
+      type: object
+      additionalProperties: false
+      properties:
+        id: { type: string, maxLength: 64 }
+        name: { type: string, maxLength: 100 }
+        slug: { type: string, maxLength: 100, pattern: '^[a-z0-9\-]+$' }
+        level: { type: integer, format: int32, minimum: 0, maximum: 5, example: 2 }
+      required: [id, name, slug]
+      # 🤖 RAG: level помогает боту понимать глубину иерархии
+      # 🔒 pattern: только латиница, цифры, дефисы (безопасно для URL)
+
+    # === УНИВЕРСАЛЬНАЯ ХАРАКТЕРИСТИКА (ключевое для RAG и 1С) ===
+    SpecificationItem:
+      type: object
+      additionalProperties: false
+      properties:
+        key:
+          type: string
+          maxLength: 50
+          pattern: '^[a-z_]+$'
+          description: Унифицированный ключ для программной фильтрации
+          example: power_kw
+          # 🤖 RAG: используется в WHERE-условиях при hybrid search
+          # 📦 1С: маппится на "ИдентификаторСвойства" из справочника
+        label:
+          type: string
+          maxLength: 100
+          description: Человекочитаемое название для фронтенда
+          example: Мощность, кВт
+        value:
+          type: string
+          maxLength: 255
+          description: Оригинальное значение (как в карточке товара)
+          example: "0.04"
+        value_num:
+          type: number
+          format: float
+          minimum: -9999999
+          maximum: 9999999
+          nullable: true
+          description: Числовое представление для сортировки и сравнений
+          example: 0.04
+          # ⚡ Позволяет делать запросы типа: "найди вентиляторы до 0.1 кВт"
+        unit:
+          type: string
+          maxLength: 20
+          nullable: true
+          example: кВт
+        group:
+          type: string
+          maxLength: 50
+          nullable: true
+          example: electrical
+          # 🎨 UI: группировка на сайте ("⚡ Электрика", "📏 Габариты")
+        is_filterable:
+          type: boolean
+          default: false
+          example: true
+          # ⚡ Оптимизация: только помеченные true попадают в индекс фильтров
+      required: [key, label, value]
+
+    # === МЕДИА (ИЗОБРАЖЕНИЯ) ===
+    MediaItem:
+      type: object
+      additionalProperties: false
+      properties:
+        url: { type: string, format: uri, maxLength: 512 }
+        alt: { type: string, maxLength: 255 }
+        is_main: { type: boolean, default: false }
+        order: { type: integer, format: int32, minimum: 0, maximum: 999, example: 1 }
+      required: [url]
+      # 🖼️ order: сортировка в галерее. is_main: обложка в каталоге.
+
+    # === ДОКУМЕНТАЦИЯ (BIM, паспорта, чертежи) ===
+    DocumentItem:
+      type: object
+      additionalProperties: false
+      properties:
+        type: { type: string, enum: [passport, bim, manual, certificate, drawing], maxLength: 30, example: passport }
+        name: { type: string, maxLength: 255, example: Паспорт }
+        url: { type: string, format: uri, maxLength: 512 }
+        format: { type: string, enum: [pdf, dwg, rfa, zip, docx], maxLength: 10, example: pdf }
+      required: [type, name, url]
+      # 🏗️ type/format: позволяют фронтенду показывать иконки и фильтровать
+
+    # === СОПУТСТВУЮЩИЕ ТОВАРЫ (Кросс-сейл) ===
+    AccessoryItem:
+      type: object
+      additionalProperties: false
+      properties:
+        id: { type: string, maxLength: 64 }
+        name: { type: string, maxLength: 255 }
+        price: { type: number, format: float, minimum: 0, maximum: 10000000, example: 261.00 }
+        stock: { type: integer, format: int32, minimum: 0, maximum: 100000, example: 135 }
+      required: [id, name, price]
+      # 🛒 Возвращается вместе с товаром, чтобы бот мог предлагать комплект сразу
+
+    # === ОСНОВНАЯ СТРУКТУРА ТОВАРА (Оптимизирована под RAG) ===
+    ProductForRAG:
+      type: object
+      additionalProperties: false
+      properties:
+        id: { type: string, maxLength: 64, pattern: '^[a-zA-Z0-9\-_]+$', example: voac1-100-2speed }
+        slug: { type: string, maxLength: 255 }
+        name: { type: string, maxLength: 255, example: Вентилятор канальный осевой }
+        category: { $ref: '#/components/schemas/CategoryRef' }
         
-        const script = document.createElement('script');
-        script.src = src;
-        script.onload = () => {
-          log(`✅ Redoc загружен`, 'ok');
-          initRedoc();
-        };
-        script.onerror = () => {
-          log(`⚠️ Ошибка с ${src}, пробуем следующий...`, 'info');
-          tryLoad();
-        };
-        document.head.appendChild(script);
-      };
-      tryLoad();
-    }
+        price: { type: number, format: float, minimum: 0, maximum: 10000000, example: 4099.00 }
+        currency: { type: string, enum: [RUB], maxLength: 3, example: RUB }
+        stock: { type: integer, format: int32, minimum: 0, maximum: 100000, example: 26 }
+        
+        searchable_text:
+          type: string
+          maxLength: 4000
+          description: |
+            🤖 RAG: Готовый текст для векторизации (embeddings).
+            Содержит: название + категорию + все характеристики + применение.
+            Генерируется на стороне 1С/бэкенда при изменении товара.
+          example: Вентилятор канальный осевой, подключение d100, мощность 0.04 кВт, шум 30 дБ
+        
+        specifications:
+          type: array
+          minItems: 0
+          maxItems: 100
+          items: { $ref: '#/components/schemas/SpecificationItem' }
+          # 📦 Массив вместо объекта: позволяет динамически добавлять характеристики
+        
+        spec_schema_ref:
+          type: string
+          format: uri
+          maxLength: 512
+          description: URL JSON Schema с допустимыми ключами для данной категории
+          example: https://api.progress-nw.ru/schemas/specs/axial-fan.json
+        
+        media:
+          type: object
+          additionalProperties: false
+          properties:
+            images:
+              type: array
+              minItems: 0
+              maxItems: 20
+              items: { $ref: '#/components/schemas/MediaItem' }
+            documents:
+              type: array
+              minItems: 0
+              maxItems: 10
+              items: { $ref: '#/components/schemas/DocumentItem' }
+        
+        accessories:
+          type: array
+          minItems: 0
+          maxItems: 50
+          items: { $ref: '#/components/schemas/AccessoryItem' }
+        
+        status: { $ref: '#/components/schemas/ProductStatus' }
+        seo:
+          type: object
+          additionalProperties: false
+          properties:
+            title: { type: string, maxLength: 70 }
+            meta_description: { type: string, maxLength: 160 }
+            keywords:
+              type: array
+              maxItems: 20
+              items: { type: string, maxLength: 50 }
+        
+        updated_at: { type: string, format: date-time, maxLength: 30, example: "2026-04-03T14:20:00+03:00" }
+        created_at: { type: string, format: date-time, maxLength: 30 }
+        # 🔄 updated_at: критичен для инкрементальной синхронизации 1С
+      required: [id, name, category, price, specifications, searchable_text, status, updated_at]
 
-    function initRedoc() {
-      try {
-        log('🚀 Инициализация Redoc...');
+    # === ОБЁРТКА СПИСКА С ПАГИНАЦИЕЙ (ИСПРАВЛЕНО: добавлен data) ===
+    ProductListResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        meta:
+          type: object
+          additionalProperties: false
+          properties:
+            total: { type: integer, format: int32, minimum: 0, maximum: 1000000, example: 1250 }
+            page: { type: integer, format: int32, minimum: 1, maximum: 10000, example: 1 }
+            limit: { type: integer, format: int32, minimum: 1, maximum: 100, example: 50 }
+            pages: { type: integer, format: int32, minimum: 0, maximum: 10000, example: 25 }
+          required: [total, page, limit, pages]
         
-        // ⚠️ Redoc.init() НЕ возвращает Promise в большинстве версий!
-        // Вызываем синхронно + try-catch для отлова ошибок
-        Redoc.init(
-          'swagger.yaml',
-          {
-            theme: {
-              typography: { fontSize: '14px', lineHeight: '1.5' },
-              colors: { primary: { main: '#2563eb' } }
-            },
-            hideHostname: false,
-            expandSingleSchemaField: true,
-            nativeScrollbars: true
-          },
-          document.getElementById('redoc-container')
-        );
-        
-        // Если дошли сюда — инициализация прошла без исключений
-        setTimeout(() => {
-          if (document.getElementById('redoc-container').querySelector('.redoc-wrapper')) {
-            log('✅ Документация отображена', 'ok');
-          }
-        }, 500); // Небольшая задержка, чтобы редеринг успел завершиться
-        
-      } catch (e) {
-        log(`❌ Ошибка инициализации: ${e.message || e}`, 'error');
-        log(`💡 Проверь валидность swagger.yaml в <a href="https://validator.swagger.io" target="_blank">валидаторе</a>`, 'info');
-      }
-    }
-  </script>
-</body>
-</html>
+        # ✅ ИСПРАВЛЕНО: явный ключ "data" для массива товаров
+        data:
+          type: array
+          minItems: 0
+          maxItems: 100
+          items: { $ref: '#/components/schemas/ProductForRAG' }
+      required: [meta, data]
+      # 📦 meta: позволяет фронтенду строить пагинатор без лишних запросов
+
+    # === ЕДИНЫЙ ФОРМАТ ОШИБОК ===
+    Error:
+      type: object
+      additionalProperties: false
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          properties:
+            code: { type: string, maxLength: 50, example: NOT_FOUND }
+            message: { type: string, maxLength: 255, example: Ресурс не найден }
+            details: { type: object, additionalProperties: true }
+      required: [error]
+      # 🛡️ Стандартизация: фронтенд/1С парсят code, а не текст сообщения
+
+  responses:
+    Unauthorized:
+      description: Неверный или отсутствующий API-Key
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Forbidden:
+      description: Доступ запрещён (ключ есть, но нет прав)
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    NotFound:
+      description: Ресурс не найден
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    RateLimited:
+      description: Превышен лимит запросов (100/мин)
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    DefaultError:
+      description: Неожиданная ошибка сервера (fallback для 4xx/5xx)
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+
+paths:
+  /products:
+    get:
+      summary: Список товаров
+      tags: [Products]
+      parameters:
+        - name: category
+          in: query
+          schema: { type: string, maxLength: 100 }
+          description: Фильтр по slug категории
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/ProductStatus' }
+        - name: search
+          in: query
+          schema: { type: string, maxLength: 255 }
+          description: Текстовый поиск по name и searchable_text
+        - name: spec_filter
+          in: query
+          schema: { type: string, maxLength: 255 }
+          description: Фильтр по характеристике. Формат: key:operator:value
+        - name: updated_from
+          in: query
+          schema: { type: string, format: date-time, maxLength: 30 }
+          description: 🔄 Инкрементальная синхронизация 1С (только изменённые)
+        - name: page
+          in: query
+          schema: { type: integer, format: int32, minimum: 1, maximum: 10000, default: 1 }
+        - name: limit
+          in: query
+          schema: { type: integer, format: int32, minimum: 1, maximum: 100, default: 50 }
+      responses:
+        '200':
+          description: Список товаров
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProductListResponse' }
+        '400': { $ref: '#/components/responses/DefaultError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '406': { $ref: '#/components/responses/DefaultError' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        default: { $ref: '#/components/responses/DefaultError' }
+
+  /products/{product_id}:
+    get:
+      summary: Детали товара
+      tags: [Products]
+      parameters:
+        - name: product_id
+          in: path
+          required: true
+          schema: { type: string, maxLength: 64, pattern: '^[a-zA-Z0-9\-_]+$' }
+      responses:
+        '200':
+          description: Детали товара
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProductForRAG' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '406': { $ref: '#/components/responses/DefaultError' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        default: { $ref: '#/components/responses/DefaultError' }
+
+  /categories:
+    get:
+      summary: Список категорий
+      tags: [Categories]
+      responses:
+        '200':
+          description: Дерево категорий
+          content:
+            application/json:
+              schema:
+                type: array
+                minItems: 0
+                maxItems: 500
+                items: { $ref: '#/components/schemas/CategoryRef' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '406': { $ref: '#/components/responses/DefaultError' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        default: { $ref: '#/components/responses/DefaultError' }
+
+  /specs/schema/{category_slug}:
+    get:
+      summary: Схема характеристик категории
+      tags: [Metadata]
+      parameters:
+        - name: category_slug
+          in: path
+          required: true
+          schema: { type: string, maxLength: 100, pattern: '^[a-z0-9\-]+$' }
+      responses:
+        '200':
+          description: Допустимые ключи характеристик для валидации
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  category: { type: string, maxLength: 100 }
+                  allowed_specs:
+                    type: array
+                    maxItems: 200
+                    items:
+                      type: object
+                      additionalProperties: false
+                      properties:
+                        key: { type: string, maxLength: 50 }
+                        label: { type: string, maxLength: 100 }
+                        data_type: { type: string, enum: [string, number, boolean] }
+                        unit: { type: string, maxLength: 20, nullable: true }
+                        group: { type: string, maxLength: 50 }
+                        is_filterable: { type: boolean }
+        '404': { $ref: '#/components/responses/NotFound' }
+        default: { $ref: '#/components/responses/DefaultError' }
+        # 🛡️ Позволяет фронтенду/1С динамически строить формы ввода
+
+tags:
+  - name: Products
+    description: Товары (список и детализация)
+  - name: Categories
+    description: Справочник категорий
+  - name: Metadata
+    description: Динамические схемы валидации характеристик
