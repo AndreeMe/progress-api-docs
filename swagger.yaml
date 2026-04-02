@@ -8,8 +8,6 @@ info:
     - Векторного поиска (RAG-ассистенты, чат-боты)
     - Гибкой фильтрации по разнородным характеристикам
   version: 1.0.0
-  contact:
-    email: 1c@progress-nw.ru
 
 # 🌍 Базовые URL. Меняется при деплое на staging/production.
 servers:
