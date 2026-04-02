@@ -17,6 +17,7 @@
   <div id="status"></div>
   <div id="redoc-container"></div>
 
+  <script src="https://cdn.jsdelivr.net/npm/redoc@latest/bundles/redoc.standalone.js"></script>
   <script>
     const status = document.getElementById('status');
     const log = (msg, type = 'info') => {
@@ -27,107 +28,30 @@
       status.appendChild(el);
     };
 
-    let specJson = null;
-
-    // 1. Загружаем swagger.yaml и парсим в JSON
-    Promise.all([
-      loadYamlParser(),
-      fetch('swagger.yaml').then(res => {
+    // Загружаем swagger.json и инициализируем Redoc
+    fetch('swagger.json')
+      .then(res => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.text();
+        return res.json();
       })
-    ])
-      .then(([jsyaml, yamlText]) => {
-        log(`✅ swagger.yaml загружен (${yamlText.length} байт)`, 'ok');
-        specJson = jsyaml.load(yamlText);
-        log('✅ YAML распарсен в JSON', 'ok');
-        return loadRedoc();
-      })
-      .then(() => {
-        if (specJson && window.Redoc) {
-          initRedoc(specJson);
-        }
-      })
-      .catch(err => {
-        log(`❌ Ошибка: ${err.message}`, 'error');
-        log('💡 Попробуй открыть напрямую: <a href="swagger.yaml" target="_blank">swagger.yaml</a>', 'info');
-      });
-
-    function loadYamlParser() {
-      return new Promise((resolve, reject) => {
-        const script = document.createElement('script');
-        script.src = 'https://cdn.jsdelivr.net/npm/js-yaml@latest/dist/js-yaml.min.js';
-        script.onload = () => {
-          log('✅ js-yaml загружен', 'ok');
-          resolve(window.jsyaml);
-        };
-        script.onerror = () => reject(new Error('Не удалось загрузить js-yaml'));
-        document.head.appendChild(script);
-      });
-    }
-
-    function loadRedoc() {
-      // Если Redoc уже загружен — возвращаем Promise
-      if (window.Redoc) {
-        return Promise.resolve();
-      }
-
-      // Список CDN для загрузки (пробуем по очереди)
-      const cdns = [
-        'https://cdn.jsdelivr.net/npm/redoc@latest/bundles/redoc.standalone.js',
-        'https://unpkg.com/redoc@latest/bundles/redoc.standalone.js',
-        'https://cdnjs.cloudflare.com/ajax/libs/redoc/2.1.5/bundles/redoc.standalone.js'
-      ];
-
-      let idx = 0;
-      const tryLoad = () => {
-        if (idx >= cdns.length) {
-          log('❌ Не удалось загрузить Redoc ни с одного CDN', 'error');
-          return Promise.reject(new Error('Redoc не загружен'));
-        }
-        const src = cdns[idx++];
-        log(`⏳ Загрузка Redoc с ${src}...`);
-
-        return new Promise((resolve, reject) => {
-          const script = document.createElement('script');
-          script.src = src;
-          script.onload = () => {
-            log(`✅ Redoc загружен с ${src}`, 'ok');
-            resolve();
-          };
-          script.onerror = () => {
-            log(`⚠️ Ошибка загрузки с ${src}, пробуем следующий...`, 'info');
-            tryLoad().then(resolve).catch(reject);
-          };
-          document.head.appendChild(script);
-        });
-      };
-      return tryLoad();
-    }
-
-    function initRedoc(spec) {
-      try {
-        log('🚀 Инициализация Redoc...');
-        const initResult = Redoc.init(spec, {
+      .then(spec => {
+        log('✅ swagger.json загружен', 'ok');
+        log('🚀 Инициализация Redoc...', 'info');
+        return Redoc.init(spec, {
           theme: {
             typography: { fontSize: '14px', lineHeight: '1.5' },
             colors: { primary: { main: '#2563eb' } }
           },
           hideHostname: false
         }, document.getElementById('redoc-container'));
-
-        // Redoc.init может возвращать Promise (не во всех версиях)
-        if (initResult && typeof initResult.then === 'function') {
-          initResult
-            .then(() => log('✅ Документация отображена', 'ok'))
-            .catch(e => log(`❌ Ошибка рендеринга: ${e.message || e}`, 'error'));
-        } else {
-          log('✅ Документация отображена', 'ok');
-        }
-      } catch (e) {
-        log(`❌ Исключение при инициализации: ${e.message || e}`, 'error');
-      }
-    }
+      })
+      .then(() => {
+        log('✅ Документация отображена', 'ok');
+      })
+      .catch(err => {
+        log(`❌ Ошибка: ${err.message}`, 'error');
+        console.error(err);
+      });
   </script>
 </body>
 </html>
