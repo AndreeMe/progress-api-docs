@@ -1,4 +1,3 @@
-cat > README.md << 'EOF'
 # Progress NW Catalog API
 
 OpenAPI 3.0 спецификация для каталога [progress-nw.ru](https://progress-nw.ru/catalog).
