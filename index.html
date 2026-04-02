@@ -17,7 +17,6 @@
   <div id="status"></div>
   <div id="redoc-container"></div>
 
-  <script src="https://cdn.jsdelivr.net/npm/redoc@latest/bundles/redoc.standalone.js"></script>
   <script>
     const status = document.getElementById('status');
     const log = (msg, type = 'info') => {
@@ -28,30 +27,76 @@
       status.appendChild(el);
     };
 
-    // Загружаем swagger.json и инициализируем Redoc
-    fetch('swagger.json')
+    // 1. Проверяем, что swagger.yaml доступен (относительный путь!)
+    fetch('swagger.yaml')
       .then(res => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.json();
+        return res.text();
       })
-      .then(spec => {
-        log('✅ swagger.json загружен', 'ok');
-        log('🚀 Инициализация Redoc...', 'info');
-        return Redoc.init(spec, {
+      .then(yaml => {
+        log(`✅ swagger.yaml загружен (${yaml.length} байт)`, 'ok');
+        loadRedoc();
+      })
+      .catch(err => {
+        log(`❌ Не удалось загрузить swagger.yaml: ${err.message}`, 'error');
+        log('💡 Попробуй открыть напрямую: <a href="swagger.yaml" target="_blank">swagger.yaml</a>', 'info');
+      });
+
+    function loadRedoc() {
+      // Если Redoc уже загружен — инициируем
+      if (window.Redoc) {
+        initRedoc();
+        return;
+      }
+
+      // Список CDN для загрузки (пробуем по очереди)
+      const cdns = [
+        'https://cdn.jsdelivr.net/npm/redoc@latest/bundles/redoc.standalone.js',
+        'https://unpkg.com/redoc@latest/bundles/redoc.standalone.js',
+        'https://cdnjs.cloudflare.com/ajax/libs/redoc/2.1.5/bundles/redoc.standalone.js'
+      ];
+
+      let idx = 0;
+      const tryLoad = () => {
+        if (idx >= cdns.length) {
+          log('❌ Не удалось загрузить Redoc ни с одного CDN', 'error');
+          return;
+        }
+        const src = cdns[idx++];
+        log(`⏳ Загрузка Redoc с ${src}...`);
+        
+        const script = document.createElement('script');
+        script.src = src;
+        script.onload = () => {
+          log(`✅ Redoc загружен с ${src}`, 'ok');
+          initRedoc();
+        };
+        script.onerror = () => {
+          log(`⚠️ Ошибка загрузки с ${src}, пробуем следующий...`, 'info');
+          tryLoad();
+        };
+        document.head.appendChild(script);
+      };
+      tryLoad();
+    }
+
+    function initRedoc() {
+      try {
+        log('🚀 Инициализация Redoc...');
+        // Относительный путь — работает на GitHub Pages без проблем
+        Redoc.init('swagger.yaml', {
           theme: {
             typography: { fontSize: '14px', lineHeight: '1.5' },
             colors: { primary: { main: '#2563eb' } }
           },
           hideHostname: false
-        }, document.getElementById('redoc-container'));
-      })
-      .then(() => {
-        log('✅ Документация отображена', 'ok');
-      })
-      .catch(err => {
-        log(`❌ Ошибка: ${err.message}`, 'error');
-        console.error(err);
-      });
+        }, document.getElementById('redoc-container'))
+        .then(() => log('✅ Документация отображена', 'ok'))
+        .catch(e => log(`❌ Ошибка рендеринга: ${e.message || e}`, 'error'));
+      } catch (e) {
+        log(`❌ Исключение при инициализации: ${e.message || e}`, 'error');
+      }
+    }
   </script>
 </body>
 </html>
