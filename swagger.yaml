@@ -594,4 +594,8 @@ tags:
   - name: Categories
     description: Категории
   - name: Metadata
+<<<<<<< HEAD
     description: Метаданные и схемы
+=======
+    description: Метаданные и схемы
+>>>>>>> 2887b5c (fix: minimal working swagger.yaml)
