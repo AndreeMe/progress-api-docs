@@ -4,13 +4,15 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Progress NW Catalog API</title>
-  <style>body{margin:0}</style>
+  <style>body{margin:0;padding:0}</style>
 </head>
 <body>
-  <redoc spec-url="swagger.yaml" theme="{
-    "typography": {"fontSize": "14px"},
-    "colors": {"primary": {"main": "#2563eb"}}
-  }"></redoc>
+  <div id="redoc-container"></div>
   <script src="https://cdn.redoc.ly/redoc/latest/bundles/redoc.standalone.js"></script>
+  <script>
+    // Абсолютный путь — работает всегда на GitHub Pages
+    const specUrl = window.location.origin + window.location.pathname.replace(/\/$/, '') + '/swagger.yaml';
+    Redoc.init(specUrl, { theme: { typography: { fontSize: '14px' } } }, document.getElementById('redoc-container'));
+  </script>
 </body>
 </html>
