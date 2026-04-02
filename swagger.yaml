@@ -9,7 +9,7 @@ info:
     - Гибкой фильтрации по разнородным характеристикам
   version: 1.0.0
   contact:
-    email: api@progress-nw.ru
+    email: 1c@progress-nw.ru
 
 # 🌍 Базовые URL. Меняется при деплое на staging/production.
 servers:
