@@ -1,336 +1,112 @@
 openapi: 3.0.3
 info:
   title: Progress NW Catalog API
-  description: API каталога вентиляционного оборудования. Оптимизировано для синхронизации с 1С, векторного поиска (RAG) и гибкой фильтрации.
+  description: API каталога вентиляционного оборудования. Оптимизировано для 1С и RAG.
   version: 1.0.0
-  contact:
-    email: api@progress-nw.ru
 servers:
   - url: https://progress-nw.ru/api/v1
-    description: Production
 security:
   - ApiKeyAuth: []
-
 components:
   securitySchemes:
     ApiKeyAuth:
       type: apiKey
       in: header
       name: X-API-Key
-      description: Ключ доступа. Передаётся в заголовке X-API-Key.
-
   schemas:
     ProductStatus:
       type: string
       enum:
         - active
         - archived
-      maxLength: 20
-      example: active
-
     CategoryRef:
       type: object
       additionalProperties: false
       properties:
         id:
           type: string
-          maxLength: 64
         name:
           type: string
-          maxLength: 100
         slug:
           type: string
-          maxLength: 100
-          pattern: '^[a-z0-9\-]+$'
-        level:
-          type: integer
-          format: int32
-          minimum: 0
-          maximum: 5
-          example: 2
       required:
         - id
         - name
         - slug
-
     SpecificationItem:
       type: object
       additionalProperties: false
       properties:
         key:
           type: string
-          maxLength: 50
-          pattern: '^[a-z_]+$'
-          description: Унифицированный ключ для фильтрации
-          example: power_kw
         label:
           type: string
-          maxLength: 100
-          description: Человекочитаемое название
-          example: Мощность, кВт
         value:
           type: string
-          maxLength: 255
-          description: Значение как строка
-          example: "0.04"
         value_num:
           type: number
-          format: float
-          minimum: -9999999
-          maximum: 9999999
           nullable: true
-          description: Числовое значение для сравнений
-          example: 0.04
         unit:
           type: string
-          maxLength: 20
           nullable: true
-          example: кВт
         group:
           type: string
-          maxLength: 50
           nullable: true
-          example: electrical
         is_filterable:
           type: boolean
           default: false
-          example: true
       required:
         - key
         - label
         - value
-
-    MediaItem:
-      type: object
-      additionalProperties: false
-      properties:
-        url:
-          type: string
-          format: uri
-          maxLength: 512
-        alt:
-          type: string
-          maxLength: 255
-        is_main:
-          type: boolean
-          default: false
-        order:
-          type: integer
-          format: int32
-          minimum: 0
-          maximum: 999
-          example: 1
-      required:
-        - url
-
-    DocumentItem:
-      type: object
-      additionalProperties: false
-      properties:
-        type:
-          type: string
-          enum:
-            - passport
-            - bim
-            - manual
-            - certificate
-            - drawing
-          maxLength: 30
-          example: passport
-        name:
-          type: string
-          maxLength: 255
-          example: Паспорт
-        url:
-          type: string
-          format: uri
-          maxLength: 512
-        format:
-          type: string
-          enum:
-            - pdf
-            - dwg
-            - rfa
-            - zip
-            - docx
-          maxLength: 10
-          example: pdf
-      required:
-        - type
-        - name
-        - url
-
-    AccessoryItem:
-      type: object
-      additionalProperties: false
-      properties:
-        id:
-          type: string
-          maxLength: 64
-        name:
-          type: string
-          maxLength: 255
-        price:
-          type: number
-          format: float
-          minimum: 0
-          maximum: 10000000
-          example: 261.00
-        stock:
-          type: integer
-          format: int32
-          minimum: 0
-          maximum: 100000
-          example: 135
-      required:
-        - id
-        - name
-        - price
-
     ProductForRAG:
       type: object
       additionalProperties: false
       properties:
         id:
           type: string
-          maxLength: 64
-          pattern: '^[a-zA-Z0-9\-_]+$'
-          example: voac1-100-2speed
-        slug:
-          type: string
-          maxLength: 255
         name:
           type: string
-          maxLength: 255
-          example: Вентилятор канальный осевой
         category:
           $ref: '#/components/schemas/CategoryRef'
         price:
           type: number
-          format: float
-          minimum: 0
-          maximum: 10000000
-          example: 4099.00
-        currency:
-          type: string
-          enum:
-            - RUB
-          maxLength: 3
-          example: RUB
-        stock:
-          type: integer
-          format: int32
-          minimum: 0
-          maximum: 100000
-          example: 26
         searchable_text:
           type: string
-          maxLength: 4000
-          description: Текст для векторизации в RAG
-          example: Вентилятор канальный осевой, подключение d100, мощность 0.04 кВт, шум 30 дБ
+          description: Текст для векторизации RAG
         specifications:
           type: array
-          minItems: 0
-          maxItems: 100
           items:
             $ref: '#/components/schemas/SpecificationItem'
-        spec_schema_ref:
-          type: string
-          format: uri
-          maxLength: 512
-          description: URL JSON Schema с допустимыми ключами для категории
-          example: https://api.progress-nw.ru/schemas/specs/axial-fan.json
-        media:
-          type: object
-          additionalProperties: false
-          properties:
-            images:
-              type: array
-              minItems: 0
-              maxItems: 20
-              items:
-                $ref: '#/components/schemas/MediaItem'
-            documents:
-              type: array
-              minItems: 0
-              maxItems: 10
-              items:
-                $ref: '#/components/schemas/DocumentItem'
-        accessories:
-          type: array
-          minItems: 0
-          maxItems: 50
-          items:
-            $ref: '#/components/schemas/AccessoryItem'
         status:
           $ref: '#/components/schemas/ProductStatus'
-        seo:
-          type: object
-          additionalProperties: false
-          properties:
-            title:
-              type: string
-              maxLength: 70
-            meta_description:
-              type: string
-              maxLength: 160
-            keywords:
-              type: array
-              maxItems: 20
-              items:
-                type: string
-                maxLength: 50
         updated_at:
           type: string
           format: date-time
-          maxLength: 30
-          example: '2026-04-03T14:20:00+03:00'
-        created_at:
-          type: string
-          format: date-time
-          maxLength: 30
       required:
         - id
         - name
         - category
         - price
-        - specifications
         - searchable_text
+        - specifications
         - status
         - updated_at
-
     ProductListResponse:
       type: object
       additionalProperties: false
       properties:
         meta:
           type: object
-          additionalProperties: false
           properties:
             total:
               type: integer
-              format: int32
-              minimum: 0
-              maximum: 1000000
-              example: 1250
             page:
               type: integer
-              format: int32
-              minimum: 1
-              maximum: 10000
-              example: 1
             limit:
               type: integer
-              format: int32
-              minimum: 1
-              maximum: 100
-              example: 50
             pages:
               type: integer
-              format: int32
-              minimum: 0
-              maximum: 10000
-              example: 25
           required:
             - total
             - page
@@ -338,68 +114,34 @@ components:
             - pages
         data:
           type: array
-          minItems: 0
-          maxItems: 100
           items:
             $ref: '#/components/schemas/ProductForRAG'
       required:
         - meta
         - data
-
     Error:
       type: object
-      additionalProperties: false
       properties:
         error:
           type: object
-          additionalProperties: false
           properties:
             code:
               type: string
-              maxLength: 50
-              example: NOT_FOUND
             message:
               type: string
-              maxLength: 255
-              example: Ресурс не найден
-            details:
-              type: object
-              additionalProperties: true
-      required:
-        - error
-
   responses:
     Unauthorized:
-      description: Неверный или отсутствующий API-Key
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/Error'
-    Forbidden:
-      description: Доступ запрещён
+      description: Неверный API-Key
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/Error'
     NotFound:
-      description: Ресурс не найден
+      description: Не найдено
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/Error'
-    RateLimited:
-      description: Превышен лимит запросов
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/Error'
-    DefaultError:
-      description: Неожиданная ошибка
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/Error'
-
 paths:
   /products:
     get:
@@ -407,71 +149,35 @@ paths:
       tags:
         - Products
       parameters:
-        - name: category
-          in: query
-          schema:
-            type: string
-            maxLength: 100
-          description: Фильтр по slug категории
-        - name: status
-          in: query
-          schema:
-            $ref: '#/components/schemas/ProductStatus'
         - name: search
           in: query
           schema:
             type: string
-            maxLength: 255
-          description: Текстовый поиск
-        - name: spec_filter
-          in: query
-          schema:
-            type: string
-            maxLength: 255
-          description: Фильтр по характеристике: key:operator:value
         - name: updated_from
           in: query
           schema:
             type: string
             format: date-time
-            maxLength: 30
-          description: Инкрементальная синхронизация 1С
         - name: page
           in: query
           schema:
             type: integer
-            format: int32
-            minimum: 1
-            maximum: 10000
             default: 1
         - name: limit
           in: query
           schema:
             type: integer
-            format: int32
-            minimum: 1
-            maximum: 100
             default: 50
+            maximum: 100
       responses:
         '200':
-          description: Список товаров
+          description: OK
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProductListResponse'
-        '400':
-          $ref: '#/components/responses/DefaultError'
         '401':
           $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '406':
-          $ref: '#/components/responses/DefaultError'
-        '429':
-          $ref: '#/components/responses/RateLimited'
-        default:
-          $ref: '#/components/responses/DefaultError'
-
   /products/{product_id}:
     get:
       summary: Детали товара
@@ -483,119 +189,17 @@ paths:
           required: true
           schema:
             type: string
-            maxLength: 64
-            pattern: '^[a-zA-Z0-9\-_]+$'
       responses:
         '200':
-          description: Детали товара
+          description: OK
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProductForRAG'
         '401':
           $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
-        '406':
-          $ref: '#/components/responses/DefaultError'
-        '429':
-          $ref: '#/components/responses/RateLimited'
-        default:
-          $ref: '#/components/responses/DefaultError'
-
-  /categories:
-    get:
-      summary: Список категорий
-      tags:
-        - Categories
-      responses:
-        '200':
-          description: Дерево категорий
-          content:
-            application/json:
-              schema:
-                type: array
-                minItems: 0
-                maxItems: 500
-                items:
-                  $ref: '#/components/schemas/CategoryRef'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '406':
-          $ref: '#/components/responses/DefaultError'
-        '429':
-          $ref: '#/components/responses/RateLimited'
-        default:
-          $ref: '#/components/responses/DefaultError'
-
-  /specs/schema/{category_slug}:
-    get:
-      summary: Схема характеристик категории
-      tags:
-        - Metadata
-      parameters:
-        - name: category_slug
-          in: path
-          required: true
-          schema:
-            type: string
-            maxLength: 100
-            pattern: '^[a-z0-9\-]+$'
-      responses:
-        '200':
-          description: Допустимые ключи характеристик
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: false
-                properties:
-                  category:
-                    type: string
-                    maxLength: 100
-                  allowed_specs:
-                    type: array
-                    maxItems: 200
-                    items:
-                      type: object
-                      additionalProperties: false
-                      properties:
-                        key:
-                          type: string
-                          maxLength: 50
-                        label:
-                          type: string
-                          maxLength: 100
-                        data_type:
-                          type: string
-                          enum:
-                            - string
-                            - number
-                            - boolean
-                        unit:
-                          type: string
-                          maxLength: 20
-                          nullable: true
-                        group:
-                          type: string
-                          maxLength: 50
-                        is_filterable:
-                          type: boolean
-        '404':
-          $ref: '#/components/responses/NotFound'
-        default:
-          $ref: '#/components/responses/DefaultError'
-
 tags:
   - name: Products
-    description: Товары
   - name: Categories
-    description: Категории
-  - name: Metadata
-<<<<<<< HEAD
-    description: Метаданные и схемы
-=======
-    description: Метаданные и схемы
->>>>>>> 2887b5c (fix: minimal working swagger.yaml)
