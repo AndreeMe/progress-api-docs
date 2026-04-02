@@ -1,60 +1,58 @@
 openapi: 3.0.3
 info:
   title: Progress NW Catalog API
-  description: |
-    API каталога вентиляционного оборудования.
-    Оптимизировано для:
-    - Синхронизации с 1С (номенклатура, остатки, цены)
-    - Векторного поиска (RAG-ассистенты, чат-боты)
-    - Гибкой фильтрации по разнородным характеристикам
+  description: API каталога вентиляционного оборудования. Оптимизировано для синхронизации с 1С, векторного поиска (RAG) и гибкой фильтрации.
   version: 1.0.0
   contact:
     email: api@progress-nw.ru
-
-# 🌍 Базовые URL. Меняется при деплое на staging/production.
 servers:
   - url: https://progress-nw.ru/api/v1
     description: Production
-
-# 🔐 Глобальная защита. Требует API-Key во всех запросах.
 security:
   - ApiKeyAuth: []
 
 components:
-  # === АУТЕНТИФИКАЦИЯ ===
   securitySchemes:
     ApiKeyAuth:
       type: apiKey
       in: header
       name: X-API-Key
-      description: |
-        Ключ доступа. Передаётся в заголовке каждого запроса.
-        Генерируется в админке сайта. Не передавать в URL (логируются сервером).
+      description: Ключ доступа. Передаётся в заголовке X-API-Key.
 
   schemas:
-    # === СТАТУС ТОВАРА ===
     ProductStatus:
       type: string
-      enum: [active, archived]
+      enum:
+        - active
+        - archived
       maxLength: 20
       example: active
-      # 🎯 active: отображается в каталоге, участвует в поиске
-      # 🎯 archived: скрыт из публичного каталога, но доступен по прямой ссылке
 
-    # === ССЫЛКА НА КАТЕГОРИЮ ===
     CategoryRef:
       type: object
       additionalProperties: false
       properties:
-        id: { type: string, maxLength: 64 }
-        name: { type: string, maxLength: 100 }
-        slug: { type: string, maxLength: 100, pattern: '^[a-z0-9\-]+$' }
-        level: { type: integer, format: int32, minimum: 0, maximum: 5, example: 2 }
-      required: [id, name, slug]
-      # 🤖 RAG: level помогает боту понимать глубину иерархии
-      # 🔒 pattern: только латиница, цифры, дефисы (безопасно для URL)
+        id:
+          type: string
+          maxLength: 64
+        name:
+          type: string
+          maxLength: 100
+        slug:
+          type: string
+          maxLength: 100
+          pattern: '^[a-z0-9\-]+$'
+        level:
+          type: integer
+          format: int32
+          minimum: 0
+          maximum: 5
+          example: 2
+      required:
+        - id
+        - name
+        - slug
 
-    # === УНИВЕРСАЛЬНАЯ ХАРАКТЕРИСТИКА (ключевое для RAG и 1С) ===
     SpecificationItem:
       type: object
       additionalProperties: false
@@ -63,19 +61,17 @@ components:
           type: string
           maxLength: 50
           pattern: '^[a-z_]+$'
-          description: Унифицированный ключ для программной фильтрации
+          description: Унифицированный ключ для фильтрации
           example: power_kw
-          # 🤖 RAG: используется в WHERE-условиях при hybrid search
-          # 📦 1С: маппится на "ИдентификаторСвойства" из справочника
         label:
           type: string
           maxLength: 100
-          description: Человекочитаемое название для фронтенда
+          description: Человекочитаемое название
           example: Мощность, кВт
         value:
           type: string
           maxLength: 255
-          description: Оригинальное значение (как в карточке товара)
+          description: Значение как строка
           example: "0.04"
         value_num:
           type: number
@@ -83,9 +79,8 @@ components:
           minimum: -9999999
           maximum: 9999999
           nullable: true
-          description: Числовое представление для сортировки и сравнений
+          description: Числовое значение для сравнений
           example: 0.04
-          # ⚡ Позволяет делать запросы типа: "найди вентиляторы до 0.1 кВт"
         unit:
           type: string
           maxLength: 20
@@ -96,87 +91,155 @@ components:
           maxLength: 50
           nullable: true
           example: electrical
-          # 🎨 UI: группировка на сайте ("⚡ Электрика", "📏 Габариты")
         is_filterable:
           type: boolean
           default: false
           example: true
-          # ⚡ Оптимизация: только помеченные true попадают в индекс фильтров
-      required: [key, label, value]
+      required:
+        - key
+        - label
+        - value
 
-    # === МЕДИА (ИЗОБРАЖЕНИЯ) ===
     MediaItem:
       type: object
       additionalProperties: false
       properties:
-        url: { type: string, format: uri, maxLength: 512 }
-        alt: { type: string, maxLength: 255 }
-        is_main: { type: boolean, default: false }
-        order: { type: integer, format: int32, minimum: 0, maximum: 999, example: 1 }
-      required: [url]
-      # 🖼️ order: сортировка в галерее. is_main: обложка в каталоге.
+        url:
+          type: string
+          format: uri
+          maxLength: 512
+        alt:
+          type: string
+          maxLength: 255
+        is_main:
+          type: boolean
+          default: false
+        order:
+          type: integer
+          format: int32
+          minimum: 0
+          maximum: 999
+          example: 1
+      required:
+        - url
 
-    # === ДОКУМЕНТАЦИЯ (BIM, паспорта, чертежи) ===
     DocumentItem:
       type: object
       additionalProperties: false
       properties:
-        type: { type: string, enum: [passport, bim, manual, certificate, drawing], maxLength: 30, example: passport }
-        name: { type: string, maxLength: 255, example: Паспорт }
-        url: { type: string, format: uri, maxLength: 512 }
-        format: { type: string, enum: [pdf, dwg, rfa, zip, docx], maxLength: 10, example: pdf }
-      required: [type, name, url]
-      # 🏗️ type/format: позволяют фронтенду показывать иконки и фильтровать
+        type:
+          type: string
+          enum:
+            - passport
+            - bim
+            - manual
+            - certificate
+            - drawing
+          maxLength: 30
+          example: passport
+        name:
+          type: string
+          maxLength: 255
+          example: Паспорт
+        url:
+          type: string
+          format: uri
+          maxLength: 512
+        format:
+          type: string
+          enum:
+            - pdf
+            - dwg
+            - rfa
+            - zip
+            - docx
+          maxLength: 10
+          example: pdf
+      required:
+        - type
+        - name
+        - url
 
-    # === СОПУТСТВУЮЩИЕ ТОВАРЫ (Кросс-сейл) ===
     AccessoryItem:
       type: object
       additionalProperties: false
       properties:
-        id: { type: string, maxLength: 64 }
-        name: { type: string, maxLength: 255 }
-        price: { type: number, format: float, minimum: 0, maximum: 10000000, example: 261.00 }
-        stock: { type: integer, format: int32, minimum: 0, maximum: 100000, example: 135 }
-      required: [id, name, price]
-      # 🛒 Возвращается вместе с товаром, чтобы бот мог предлагать комплект сразу
+        id:
+          type: string
+          maxLength: 64
+        name:
+          type: string
+          maxLength: 255
+        price:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 10000000
+          example: 261.00
+        stock:
+          type: integer
+          format: int32
+          minimum: 0
+          maximum: 100000
+          example: 135
+      required:
+        - id
+        - name
+        - price
 
-    # === ОСНОВНАЯ СТРУКТУРА ТОВАРА (Оптимизирована под RAG) ===
     ProductForRAG:
       type: object
       additionalProperties: false
       properties:
-        id: { type: string, maxLength: 64, pattern: '^[a-zA-Z0-9\-_]+$', example: voac1-100-2speed }
-        slug: { type: string, maxLength: 255 }
-        name: { type: string, maxLength: 255, example: Вентилятор канальный осевой }
-        category: { $ref: '#/components/schemas/CategoryRef' }
-        
-        price: { type: number, format: float, minimum: 0, maximum: 10000000, example: 4099.00 }
-        currency: { type: string, enum: [RUB], maxLength: 3, example: RUB }
-        stock: { type: integer, format: int32, minimum: 0, maximum: 100000, example: 26 }
-        
+        id:
+          type: string
+          maxLength: 64
+          pattern: '^[a-zA-Z0-9\-_]+$'
+          example: voac1-100-2speed
+        slug:
+          type: string
+          maxLength: 255
+        name:
+          type: string
+          maxLength: 255
+          example: Вентилятор канальный осевой
+        category:
+          $ref: '#/components/schemas/CategoryRef'
+        price:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 10000000
+          example: 4099.00
+        currency:
+          type: string
+          enum:
+            - RUB
+          maxLength: 3
+          example: RUB
+        stock:
+          type: integer
+          format: int32
+          minimum: 0
+          maximum: 100000
+          example: 26
         searchable_text:
           type: string
           maxLength: 4000
-          description: |
-            🤖 RAG: Готовый текст для векторизации (embeddings).
-            Содержит: название + категорию + все характеристики + применение.
-            Генерируется на стороне 1С/бэкенда при изменении товара.
+          description: Текст для векторизации в RAG
           example: Вентилятор канальный осевой, подключение d100, мощность 0.04 кВт, шум 30 дБ
-        
         specifications:
           type: array
           minItems: 0
           maxItems: 100
-          items: { $ref: '#/components/schemas/SpecificationItem' }
-          # 📦 Массив вместо объекта: позволяет динамически добавлять характеристики
-        
+          items:
+            $ref: '#/components/schemas/SpecificationItem'
         spec_schema_ref:
           type: string
           format: uri
           maxLength: 512
-          description: URL JSON Schema с допустимыми ключами для данной категории
+          description: URL JSON Schema с допустимыми ключами для категории
           example: https://api.progress-nw.ru/schemas/specs/axial-fan.json
-        
         media:
           type: object
           additionalProperties: false
@@ -185,37 +248,57 @@ components:
               type: array
               minItems: 0
               maxItems: 20
-              items: { $ref: '#/components/schemas/MediaItem' }
+              items:
+                $ref: '#/components/schemas/MediaItem'
             documents:
               type: array
               minItems: 0
               maxItems: 10
-              items: { $ref: '#/components/schemas/DocumentItem' }
-        
+              items:
+                $ref: '#/components/schemas/DocumentItem'
         accessories:
           type: array
           minItems: 0
           maxItems: 50
-          items: { $ref: '#/components/schemas/AccessoryItem' }
-        
-        status: { $ref: '#/components/schemas/ProductStatus' }
+          items:
+            $ref: '#/components/schemas/AccessoryItem'
+        status:
+          $ref: '#/components/schemas/ProductStatus'
         seo:
           type: object
           additionalProperties: false
           properties:
-            title: { type: string, maxLength: 70 }
-            meta_description: { type: string, maxLength: 160 }
+            title:
+              type: string
+              maxLength: 70
+            meta_description:
+              type: string
+              maxLength: 160
             keywords:
               type: array
               maxItems: 20
-              items: { type: string, maxLength: 50 }
-        
-        updated_at: { type: string, format: date-time, maxLength: 30, example: "2026-04-03T14:20:00+03:00" }
-        created_at: { type: string, format: date-time, maxLength: 30 }
-        # 🔄 updated_at: критичен для инкрементальной синхронизации 1С
-      required: [id, name, category, price, specifications, searchable_text, status, updated_at]
+              items:
+                type: string
+                maxLength: 50
+        updated_at:
+          type: string
+          format: date-time
+          maxLength: 30
+          example: '2026-04-03T14:20:00+03:00'
+        created_at:
+          type: string
+          format: date-time
+          maxLength: 30
+      required:
+        - id
+        - name
+        - category
+        - price
+        - specifications
+        - searchable_text
+        - status
+        - updated_at
 
-    # === ОБЁРТКА СПИСКА С ПАГИНАЦИЕЙ (ИСПРАВЛЕНО: добавлен data) ===
     ProductListResponse:
       type: object
       additionalProperties: false
@@ -224,22 +307,45 @@ components:
           type: object
           additionalProperties: false
           properties:
-            total: { type: integer, format: int32, minimum: 0, maximum: 1000000, example: 1250 }
-            page: { type: integer, format: int32, minimum: 1, maximum: 10000, example: 1 }
-            limit: { type: integer, format: int32, minimum: 1, maximum: 100, example: 50 }
-            pages: { type: integer, format: int32, minimum: 0, maximum: 10000, example: 25 }
-          required: [total, page, limit, pages]
-        
-        # ✅ ИСПРАВЛЕНО: явный ключ "data" для массива товаров
+            total:
+              type: integer
+              format: int32
+              minimum: 0
+              maximum: 1000000
+              example: 1250
+            page:
+              type: integer
+              format: int32
+              minimum: 1
+              maximum: 10000
+              example: 1
+            limit:
+              type: integer
+              format: int32
+              minimum: 1
+              maximum: 100
+              example: 50
+            pages:
+              type: integer
+              format: int32
+              minimum: 0
+              maximum: 10000
+              example: 25
+          required:
+            - total
+            - page
+            - limit
+            - pages
         data:
           type: array
           minItems: 0
           maxItems: 100
-          items: { $ref: '#/components/schemas/ProductForRAG' }
-      required: [meta, data]
-      # 📦 meta: позволяет фронтенду строить пагинатор без лишних запросов
+          items:
+            $ref: '#/components/schemas/ProductForRAG'
+      required:
+        - meta
+        - data
 
-    # === ЕДИНЫЙ ФОРМАТ ОШИБОК ===
     Error:
       type: object
       additionalProperties: false
@@ -248,99 +354,162 @@ components:
           type: object
           additionalProperties: false
           properties:
-            code: { type: string, maxLength: 50, example: NOT_FOUND }
-            message: { type: string, maxLength: 255, example: Ресурс не найден }
-            details: { type: object, additionalProperties: true }
-      required: [error]
-      # 🛡️ Стандартизация: фронтенд/1С парсят code, а не текст сообщения
+            code:
+              type: string
+              maxLength: 50
+              example: NOT_FOUND
+            message:
+              type: string
+              maxLength: 255
+              example: Ресурс не найден
+            details:
+              type: object
+              additionalProperties: true
+      required:
+        - error
 
   responses:
     Unauthorized:
       description: Неверный или отсутствующий API-Key
-      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
     Forbidden:
-      description: Доступ запрещён (ключ есть, но нет прав)
-      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+      description: Доступ запрещён
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
     NotFound:
       description: Ресурс не найден
-      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
     RateLimited:
-      description: Превышен лимит запросов (100/мин)
-      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+      description: Превышен лимит запросов
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
     DefaultError:
-      description: Неожиданная ошибка сервера (fallback для 4xx/5xx)
-      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+      description: Неожиданная ошибка
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
 
 paths:
   /products:
     get:
       summary: Список товаров
-      tags: [Products]
+      tags:
+        - Products
       parameters:
         - name: category
           in: query
-          schema: { type: string, maxLength: 100 }
+          schema:
+            type: string
+            maxLength: 100
           description: Фильтр по slug категории
         - name: status
           in: query
-          schema: { $ref: '#/components/schemas/ProductStatus' }
+          schema:
+            $ref: '#/components/schemas/ProductStatus'
         - name: search
           in: query
-          schema: { type: string, maxLength: 255 }
-          description: Текстовый поиск по name и searchable_text
+          schema:
+            type: string
+            maxLength: 255
+          description: Текстовый поиск
         - name: spec_filter
           in: query
-          schema: { type: string, maxLength: 255 }
-          description: Фильтр по характеристике. Формат: key:operator:value
+          schema:
+            type: string
+            maxLength: 255
+          description: Фильтр по характеристике: key:operator:value
         - name: updated_from
           in: query
-          schema: { type: string, format: date-time, maxLength: 30 }
-          description: 🔄 Инкрементальная синхронизация 1С (только изменённые)
+          schema:
+            type: string
+            format: date-time
+            maxLength: 30
+          description: Инкрементальная синхронизация 1С
         - name: page
           in: query
-          schema: { type: integer, format: int32, minimum: 1, maximum: 10000, default: 1 }
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+            maximum: 10000
+            default: 1
         - name: limit
           in: query
-          schema: { type: integer, format: int32, minimum: 1, maximum: 100, default: 50 }
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+            maximum: 100
+            default: 50
       responses:
         '200':
           description: Список товаров
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/ProductListResponse' }
-        '400': { $ref: '#/components/responses/DefaultError' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '403': { $ref: '#/components/responses/Forbidden' }
-        '406': { $ref: '#/components/responses/DefaultError' }
-        '429': { $ref: '#/components/responses/RateLimited' }
-        default: { $ref: '#/components/responses/DefaultError' }
+              schema:
+                $ref: '#/components/schemas/ProductListResponse'
+        '400':
+          $ref: '#/components/responses/DefaultError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '406':
+          $ref: '#/components/responses/DefaultError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        default:
+          $ref: '#/components/responses/DefaultError'
 
   /products/{product_id}:
     get:
       summary: Детали товара
-      tags: [Products]
+      tags:
+        - Products
       parameters:
         - name: product_id
           in: path
           required: true
-          schema: { type: string, maxLength: 64, pattern: '^[a-zA-Z0-9\-_]+$' }
+          schema:
+            type: string
+            maxLength: 64
+            pattern: '^[a-zA-Z0-9\-_]+$'
       responses:
         '200':
           description: Детали товара
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/ProductForRAG' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '403': { $ref: '#/components/responses/Forbidden' }
-        '404': { $ref: '#/components/responses/NotFound' }
-        '406': { $ref: '#/components/responses/DefaultError' }
-        '429': { $ref: '#/components/responses/RateLimited' }
-        default: { $ref: '#/components/responses/DefaultError' }
+              schema:
+                $ref: '#/components/schemas/ProductForRAG'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '406':
+          $ref: '#/components/responses/DefaultError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        default:
+          $ref: '#/components/responses/DefaultError'
 
   /categories:
     get:
       summary: Список категорий
-      tags: [Categories]
+      tags:
+        - Categories
       responses:
         '200':
           description: Дерево категорий
@@ -350,31 +519,42 @@ paths:
                 type: array
                 minItems: 0
                 maxItems: 500
-                items: { $ref: '#/components/schemas/CategoryRef' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '406': { $ref: '#/components/responses/DefaultError' }
-        '429': { $ref: '#/components/responses/RateLimited' }
-        default: { $ref: '#/components/responses/DefaultError' }
+                items:
+                  $ref: '#/components/schemas/CategoryRef'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '406':
+          $ref: '#/components/responses/DefaultError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        default:
+          $ref: '#/components/responses/DefaultError'
 
   /specs/schema/{category_slug}:
     get:
       summary: Схема характеристик категории
-      tags: [Metadata]
+      tags:
+        - Metadata
       parameters:
         - name: category_slug
           in: path
           required: true
-          schema: { type: string, maxLength: 100, pattern: '^[a-z0-9\-]+$' }
+          schema:
+            type: string
+            maxLength: 100
+            pattern: '^[a-z0-9\-]+$'
       responses:
         '200':
-          description: Допустимые ключи характеристик для валидации
+          description: Допустимые ключи характеристик
           content:
             application/json:
               schema:
                 type: object
                 additionalProperties: false
                 properties:
-                  category: { type: string, maxLength: 100 }
+                  category:
+                    type: string
+                    maxLength: 100
                   allowed_specs:
                     type: array
                     maxItems: 200
@@ -382,20 +562,36 @@ paths:
                       type: object
                       additionalProperties: false
                       properties:
-                        key: { type: string, maxLength: 50 }
-                        label: { type: string, maxLength: 100 }
-                        data_type: { type: string, enum: [string, number, boolean] }
-                        unit: { type: string, maxLength: 20, nullable: true }
-                        group: { type: string, maxLength: 50 }
-                        is_filterable: { type: boolean }
-        '404': { $ref: '#/components/responses/NotFound' }
-        default: { $ref: '#/components/responses/DefaultError' }
-        # 🛡️ Позволяет фронтенду/1С динамически строить формы ввода
+                        key:
+                          type: string
+                          maxLength: 50
+                        label:
+                          type: string
+                          maxLength: 100
+                        data_type:
+                          type: string
+                          enum:
+                            - string
+                            - number
+                            - boolean
+                        unit:
+                          type: string
+                          maxLength: 20
+                          nullable: true
+                        group:
+                          type: string
+                          maxLength: 50
+                        is_filterable:
+                          type: boolean
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/DefaultError'
 
 tags:
   - name: Products
-    description: Товары (список и детализация)
+    description: Товары
   - name: Categories
-    description: Справочник категорий
+    description: Категории
   - name: Metadata
-    description: Динамические схемы валидации характеристик
+    description: Метаданные и схемы
