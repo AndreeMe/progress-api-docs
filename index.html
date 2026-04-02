@@ -84,15 +84,23 @@
       try {
         log('🚀 Инициализация Redoc...');
         // Относительный путь — работает на GitHub Pages без проблем
-        Redoc.init('swagger.yaml', {
+        const initResult = Redoc.init('swagger.yaml', {
           theme: {
             typography: { fontSize: '14px', lineHeight: '1.5' },
             colors: { primary: { main: '#2563eb' } }
           },
           hideHostname: false
-        }, document.getElementById('redoc-container'))
-        .then(() => log('✅ Документация отображена', 'ok'))
-        .catch(e => log(`❌ Ошибка рендеринга: ${e.message || e}`, 'error'));
+        }, document.getElementById('redoc-container'));
+        
+        // Redoc.init может возвращать Promise (не во всех версиях)
+        if (initResult && typeof initResult.then === 'function') {
+          initResult
+            .then(() => log('✅ Документация отображена', 'ok'))
+            .catch(e => log(`❌ Ошибка рендеринга: ${e.message || e}`, 'error'));
+        } else {
+          // Если Promise не возвращён — считаем успешным
+          log('✅ Документация отображена', 'ok');
+        }
       } catch (e) {
         log(`❌ Исключение при инициализации: ${e.message || e}`, 'error');
       }
