@@ -4,15 +4,61 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Progress NW Catalog API</title>
-  <style>body{margin:0;padding:0}</style>
+  <style>
+    body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    #loading { padding: 2rem; text-align: center; color: #666; }
+    #error { display: none; padding: 2rem; color: #dc2626; background: #fef2f2; margin: 1rem; border-radius: 4px; }
+  </style>
 </head>
 <body>
+  <div id="loading">⏳ Загрузка документации...</div>
+  <div id="error"></div>
   <div id="redoc-container"></div>
-  <script src="https://cdn.redoc.ly/redoc/latest/bundles/redoc.standalone.js"></script>
+  
+  <script src="https://cdn.jsdelivr.net/npm/redoc@latest/bundles/redoc.standalone.js"></script>
   <script>
-    // Абсолютный путь — работает всегда на GitHub Pages
-    const specUrl = window.location.origin + window.location.pathname.replace(/\/$/, '') + '/swagger.yaml';
-    Redoc.init(specUrl, { theme: { typography: { fontSize: '14px' } } }, document.getElementById('redoc-container'));
+    (function() {
+      // Ждём, пока загрузится скрипт Redoc
+      function waitForRedoc() {
+        if (typeof Redoc === 'undefined') {
+          setTimeout(waitForRedoc, 100);
+          return;
+        }
+        initRedoc();
+      }
+      
+      function initRedoc() {
+        document.getElementById('loading').style.display = 'none';
+        
+        // Формируем абсолютный путь к swagger.yaml
+        var path = window.location.pathname;
+        if (path.endsWith('/index.html')) {
+          path = path.slice(0, -11);
+        } else if (!path.endsWith('/')) {
+          path = path + '/';
+        }
+        var specUrl = window.location.origin + path + 'swagger.yaml';
+        
+        // Инициализируем Redoc
+        Redoc.init(specUrl, {
+          theme: {
+            typography: { fontSize: '14px', lineHeight: '1.5' },
+            colors: { primary: { main: '#2563eb' } }
+          },
+          hideHostname: false,
+          expandSingleSchemaField: true
+        }, document.getElementById('redoc-container'))
+        .catch(function(err) {
+          console.error('Redoc init error:', err);
+          var errDiv = document.getElementById('error');
+          errDiv.style.display = 'block';
+          errDiv.textContent = '❌ Ошибка загрузки спецификации: ' + (err.message || err);
+        });
+      }
+      
+      // Запускаем
+      waitForRedoc();
+    })();
   </script>
 </body>
 </html>
