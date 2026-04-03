@@ -2,101 +2,55 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <title>Progress NW Catalog API</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Progress NW Catalog API — Documentation</title>
   <style>
-    body { font-family: system-ui, sans-serif; margin: 0; padding: 1rem; background: #f8fafc; }
-    .msg { padding: 1rem; margin: 1rem 0; border-radius: 6px; border-left: 4px solid #64748b; background: white; }
-    .msg.error { border-left-color: #dc2626; background: #fef2f2; }
-    .msg.ok { border-left-color: #16a34a; background: #f0fdf4; }
-    .hidden { display: none; }
-    #redoc-container { margin-top: 1rem; }
+    body {
+      margin: 0;
+      padding: 0;
+    }
+    #redoc-container {
+      min-height: 100vh;
+    }
   </style>
 </head>
 <body>
-  <h1>📦 Progress NW Catalog API</h1>
-  <div id="status"></div>
   <div id="redoc-container"></div>
-
+  <script src="https://cdn.jsdelivr.net/npm/redoc@2.2.0/bundles/redoc.standalone.js"></script>
   <script>
-    const status = document.getElementById('status');
-    const log = (msg, type = 'info') => {
-      console.log(`[LOG] ${msg}`);
-      const el = document.createElement('div');
-      el.className = `msg ${type}`;
-      el.textContent = msg;
-      status.appendChild(el);
-    };
-
-    // 1. Проверяем, что swagger.yaml доступен (относительный путь!)
-    fetch('swagger.yaml')
-      .then(res => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.text();
-      })
-      .then(yaml => {
-        log(`✅ swagger.yaml загружен (${yaml.length} байт)`, 'ok');
-        loadRedoc();
-      })
-      .catch(err => {
-        log(`❌ Не удалось загрузить swagger.yaml: ${err.message}`, 'error');
-        log('💡 Попробуй открыть напрямую: <a href="swagger.yaml" target="_blank">swagger.yaml</a>', 'info');
-      });
-
-    function loadRedoc() {
-      // Если Redoc уже загружен — инициируем
-      if (window.Redoc) {
-        initRedoc();
-        return;
-      }
-
-      // Список CDN для загрузки (пробуем по очереди)
-      const cdns = [
-        'https://cdn.jsdelivr.net/npm/redoc@latest/bundles/redoc.standalone.js',
-        'https://unpkg.com/redoc@latest/bundles/redoc.standalone.js',
-        'https://cdnjs.cloudflare.com/ajax/libs/redoc/2.1.5/bundles/redoc.standalone.js'
-      ];
-
-      let idx = 0;
-      const tryLoad = () => {
-        if (idx >= cdns.length) {
-          log('❌ Не удалось загрузить Redoc ни с одного CDN', 'error');
-          return;
+    fetch('swagger.json')
+      .then(function(res) {
+        if (!res.ok) {
+          throw new Error('Failed to load swagger.json: ' + res.status);
         }
-        const src = cdns[idx++];
-        log(`⏳ Загрузка Redoc с ${src}...`);
-        
-        const script = document.createElement('script');
-        script.src = src;
-        script.onload = () => {
-          log(`✅ Redoc загружен с ${src}`, 'ok');
-          initRedoc();
-        };
-        script.onerror = () => {
-          log(`⚠️ Ошибка загрузки с ${src}, пробуем следующий...`, 'info');
-          tryLoad();
-        };
-        document.head.appendChild(script);
-      };
-      tryLoad();
-    }
-
-    function initRedoc() {
-      try {
-        log('🚀 Инициализация Redoc...');
-        // Относительный путь — работает на GitHub Pages без проблем
-        Redoc.init('swagger.yaml', {
+        return res.json();
+      })
+      .then(function(spec) {
+        Redoc.init(spec, {
+          scrollYOffset: 0,
+          hideHostname: false,
+          expandResponses: '200',
+          requiredPropsFirst: true,
+          sortPropsAlphabetically: false,
+          hideDownloadButton: false,
+          disableSearch: false,
           theme: {
-            typography: { fontSize: '14px', lineHeight: '1.5' },
-            colors: { primary: { main: '#2563eb' } }
-          },
-          hideHostname: false
-        }, document.getElementById('redoc-container'))
-        .then(() => log('✅ Документация отображена', 'ok'))
-        .catch(e => log(`❌ Ошибка рендеринга: ${e.message || e}`, 'error'));
-      } catch (e) {
-        log(`❌ Исключение при инициализации: ${e.message || e}`, 'error');
-      }
-    }
+            colors: {
+              primary: {
+                main: '#2e7d32'
+              }
+            }
+          }
+        }, document.getElementById('redoc-container'));
+      })
+      .catch(function(err) {
+        document.getElementById('redoc-container').innerHTML =
+          '<div style="padding:40px;text-align:center;font-family:sans-serif;">' +
+          '<h2>Ошибка загрузки документации</h2>' +
+          '<p>Не удалось загрузить swagger.json: ' + err.message + '</p>' +
+          '<p>Убедитесь, что файл swagger.json находится в той же директории, что и index.html</p>' +
+          '</div>';
+      });
   </script>
 </body>
 </html>

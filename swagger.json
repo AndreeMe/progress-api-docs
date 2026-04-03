@@ -2,12 +2,16 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Progress NW Catalog API",
-    "description": "API каталога вентиляционного оборудования. Оптимизировано для 1С и RAG.",
-    "version": "1.0.0"
+    "description": "API для получения товарных данных с поддержкой векторного поиска (RAG)",
+    "version": "1.0.0",
+    "contact": {
+      "email": "api@progress-nw.ru"
+    }
   },
   "servers": [
     {
-      "url": "https://progress-nw.ru/api/v1"
+      "url": "https://progress-nw.ru/api/v1",
+      "description": "Production"
     }
   ],
   "security": [
@@ -20,7 +24,8 @@
       "ApiKeyAuth": {
         "type": "apiKey",
         "in": "header",
-        "name": "X-API-Key"
+        "name": "X-API-Key",
+        "description": "Ключ доступа к API"
       }
     },
     "schemas": {
@@ -29,20 +34,33 @@
         "enum": [
           "active",
           "archived"
-        ]
+        ],
+        "maxLength": 20,
+        "example": "active"
       },
       "CategoryRef": {
         "type": "object",
         "additionalProperties": false,
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 64
           },
           "name": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 100
           },
           "slug": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 100,
+            "pattern": "^[a-z0-9\\-]+$"
+          },
+          "level": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0,
+            "maximum": 5,
+            "example": 2
           }
         },
         "required": [
@@ -56,29 +74,49 @@
         "additionalProperties": false,
         "properties": {
           "key": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 50,
+            "pattern": "^[a-z_]+$",
+            "description": "Унифицированный ключ для фильтрации",
+            "example": "power_kw"
           },
           "label": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 100,
+            "description": "Человекочитаемое название",
+            "example": "Мощность, кВт"
           },
           "value": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 255,
+            "description": "Значение как строка",
+            "example": "0.04"
           },
           "value_num": {
             "type": "number",
-            "nullable": true
+            "format": "float",
+            "minimum": -9999999,
+            "maximum": 9999999,
+            "nullable": true,
+            "description": "Числовое значение для сравнений",
+            "example": 0.04
           },
           "unit": {
             "type": "string",
-            "nullable": true
+            "maxLength": 20,
+            "nullable": true,
+            "example": "кВт"
           },
           "group": {
             "type": "string",
-            "nullable": true
+            "maxLength": 50,
+            "nullable": true,
+            "example": "electrical"
           },
           "is_filterable": {
             "type": "boolean",
-            "default": false
+            "default": false,
+            "example": true
           }
         },
         "required": [
@@ -87,38 +125,243 @@
           "value"
         ]
       },
+      "MediaItem": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "maxLength": 512
+          },
+          "alt": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "is_main": {
+            "type": "boolean",
+            "default": false
+          },
+          "order": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0,
+            "maximum": 999,
+            "example": 1
+          }
+        },
+        "required": [
+          "url"
+        ]
+      },
+      "DocumentItem": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "passport",
+              "bim",
+              "manual",
+              "certificate",
+              "drawing"
+            ],
+            "maxLength": 30,
+            "example": "passport"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 255,
+            "example": "Паспорт"
+          },
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "maxLength": 512
+          },
+          "format": {
+            "type": "string",
+            "enum": [
+              "pdf",
+              "dwg",
+              "rfa",
+              "zip",
+              "docx"
+            ],
+            "maxLength": 10,
+            "example": "pdf"
+          }
+        },
+        "required": [
+          "type",
+          "name",
+          "url"
+        ]
+      },
+      "AccessoryItem": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "price": {
+            "type": "number",
+            "format": "float",
+            "minimum": 0,
+            "maximum": 10000000,
+            "example": 261
+          },
+          "stock": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0,
+            "maximum": 100000,
+            "example": 135
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "price"
+        ]
+      },
       "ProductForRAG": {
         "type": "object",
         "additionalProperties": false,
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 64,
+            "pattern": "^[a-zA-Z0-9\\-_]+$",
+            "example": "voac1-100-2speed"
+          },
+          "slug": {
+            "type": "string",
+            "maxLength": 255
           },
           "name": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 255,
+            "example": "Вентилятор канальный осевой VO(AC1)-100"
           },
           "category": {
             "$ref": "#/components/schemas/CategoryRef"
           },
           "price": {
-            "type": "number"
+            "type": "number",
+            "format": "float",
+            "minimum": 0,
+            "maximum": 10000000,
+            "example": 4099
+          },
+          "currency": {
+            "type": "string",
+            "enum": [
+              "RUB"
+            ],
+            "maxLength": 3,
+            "example": "RUB"
+          },
+          "stock": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0,
+            "maximum": 100000,
+            "example": 26
           },
           "searchable_text": {
             "type": "string",
-            "description": "Текст для векторизации RAG"
+            "maxLength": 4000,
+            "description": "Конкатенация всех текстовых данных товара. \nИспользуется для генерации векторных эмбеддингов в RAG.\n",
+            "example": "Вентилятор канальный осевой, подключение d100, мощность 0.04 кВт, шум 30 дБ, 2 скорости, пластик, для чистого воздуха, напряжение 220В, класс защиты IP44"
           },
           "specifications": {
             "type": "array",
+            "minItems": 0,
+            "maxItems": 100,
             "items": {
               "$ref": "#/components/schemas/SpecificationItem"
+            }
+          },
+          "spec_schema_ref": {
+            "type": "string",
+            "format": "uri",
+            "maxLength": 512,
+            "description": "URL JSON Schema с допустимыми ключами для данной категории",
+            "example": "https://api.progress-nw.ru/schemas/specs/axial-fan.json"
+          },
+          "media": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "images": {
+                "type": "array",
+                "minItems": 0,
+                "maxItems": 20,
+                "items": {
+                  "$ref": "#/components/schemas/MediaItem"
+                }
+              },
+              "documents": {
+                "type": "array",
+                "minItems": 0,
+                "maxItems": 10,
+                "items": {
+                  "$ref": "#/components/schemas/DocumentItem"
+                }
+              }
+            }
+          },
+          "accessories": {
+            "type": "array",
+            "minItems": 0,
+            "maxItems": 50,
+            "items": {
+              "$ref": "#/components/schemas/AccessoryItem"
             }
           },
           "status": {
             "$ref": "#/components/schemas/ProductStatus"
           },
+          "seo": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "title": {
+                "type": "string",
+                "maxLength": 70
+              },
+              "meta_description": {
+                "type": "string",
+                "maxLength": 160
+              },
+              "keywords": {
+                "type": "array",
+                "maxItems": 20,
+                "items": {
+                  "type": "string",
+                  "maxLength": 50
+                }
+              }
+            }
+          },
           "updated_at": {
             "type": "string",
-            "format": "date-time"
+            "format": "date-time",
+            "maxLength": 30,
+            "example": "2026-04-03T14:20:00+03:00"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "maxLength": 30
           }
         },
         "required": [
@@ -126,8 +369,8 @@
           "name",
           "category",
           "price",
-          "searchable_text",
           "specifications",
+          "searchable_text",
           "status",
           "updated_at"
         ]
@@ -138,29 +381,42 @@
         "properties": {
           "meta": {
             "type": "object",
+            "additionalProperties": false,
             "properties": {
               "total": {
-                "type": "integer"
+                "type": "integer",
+                "format": "int32",
+                "minimum": 0,
+                "maximum": 1000000,
+                "example": 1250
               },
               "page": {
-                "type": "integer"
+                "type": "integer",
+                "format": "int32",
+                "minimum": 1,
+                "maximum": 10000,
+                "example": 1
               },
               "limit": {
-                "type": "integer"
+                "type": "integer",
+                "format": "int32",
+                "minimum": 1,
+                "maximum": 100,
+                "example": 50
               },
               "pages": {
-                "type": "integer"
+                "type": "integer",
+                "format": "int32",
+                "minimum": 0,
+                "maximum": 10000,
+                "example": 25
               }
-            },
-            "required": [
-              "total",
-              "page",
-              "limit",
-              "pages"
-            ]
+            }
           },
           "data": {
             "type": "array",
+            "minItems": 0,
+            "maxItems": 100,
             "items": {
               "$ref": "#/components/schemas/ProductForRAG"
             }
@@ -173,24 +429,47 @@
       },
       "Error": {
         "type": "object",
+        "additionalProperties": false,
         "properties": {
           "error": {
             "type": "object",
+            "additionalProperties": false,
             "properties": {
               "code": {
-                "type": "string"
+                "type": "string",
+                "maxLength": 50,
+                "example": "NOT_FOUND"
               },
               "message": {
-                "type": "string"
+                "type": "string",
+                "maxLength": 255,
+                "example": "Ресурс не найден"
+              },
+              "details": {
+                "type": "object",
+                "additionalProperties": true
               }
             }
           }
-        }
+        },
+        "required": [
+          "error"
+        ]
       }
     },
     "responses": {
       "Unauthorized": {
-        "description": "Неверный API-Key",
+        "description": "Неверный или отсутствующий API-Key",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Forbidden": {
+        "description": "Доступ запрещён",
         "content": {
           "application/json": {
             "schema": {
@@ -200,7 +479,27 @@
         }
       },
       "NotFound": {
-        "description": "Не найдено",
+        "description": "Ресурс не найден",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "RateLimited": {
+        "description": "Превышен лимит запросов",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "DefaultError": {
+        "description": "Неожиданная ошибка",
         "content": {
           "application/json": {
             "schema": {
@@ -220,10 +519,34 @@
         ],
         "parameters": [
           {
+            "name": "category",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/ProductStatus"
+            }
+          },
+          {
             "name": "search",
             "in": "query",
             "schema": {
-              "type": "string"
+              "type": "string",
+              "maxLength": 255
+            }
+          },
+          {
+            "name": "spec_filter",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 255
             }
           },
           {
@@ -231,7 +554,8 @@
             "in": "query",
             "schema": {
               "type": "string",
-              "format": "date-time"
+              "format": "date-time",
+              "maxLength": 30
             }
           },
           {
@@ -239,6 +563,9 @@
             "in": "query",
             "schema": {
               "type": "integer",
+              "format": "int32",
+              "minimum": 1,
+              "maximum": 10000,
               "default": 1
             }
           },
@@ -247,14 +574,16 @@
             "in": "query",
             "schema": {
               "type": "integer",
-              "default": 50,
-              "maximum": 100
+              "format": "int32",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
             }
           }
         ],
         "responses": {
           "200": {
-            "description": "OK",
+            "description": "Список товаров",
             "content": {
               "application/json": {
                 "schema": {
@@ -263,8 +592,23 @@
               }
             }
           },
+          "400": {
+            "$ref": "#/components/responses/DefaultError"
+          },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "406": {
+            "$ref": "#/components/responses/DefaultError"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "default": {
+            "$ref": "#/components/responses/DefaultError"
           }
         }
       }
@@ -281,13 +625,15 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-zA-Z0-9\\-_]+$"
             }
           }
         ],
         "responses": {
           "200": {
-            "description": "OK",
+            "description": "Детали товара",
             "content": {
               "application/json": {
                 "schema": {
@@ -299,8 +645,140 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "406": {
+            "$ref": "#/components/responses/DefaultError"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "default": {
+            "$ref": "#/components/responses/DefaultError"
+          }
+        }
+      }
+    },
+    "/categories": {
+      "get": {
+        "summary": "Список категорий",
+        "tags": [
+          "Categories"
+        ],
+        "responses": {
+          "200": {
+            "description": "Дерево категорий",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "minItems": 0,
+                  "maxItems": 500,
+                  "items": {
+                    "$ref": "#/components/schemas/CategoryRef"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "406": {
+            "$ref": "#/components/responses/DefaultError"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "default": {
+            "$ref": "#/components/responses/DefaultError"
+          }
+        }
+      }
+    },
+    "/specs/schema/{category_slug}": {
+      "get": {
+        "summary": "Схема характеристик категории",
+        "tags": [
+          "Metadata"
+        ],
+        "parameters": [
+          {
+            "name": "category_slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 100,
+              "pattern": "^[a-z0-9\\-]+$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Допустимые ключи характеристик",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "category": {
+                      "type": "string",
+                      "maxLength": 100
+                    },
+                    "allowed_specs": {
+                      "type": "array",
+                      "maxItems": 200,
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                          "key": {
+                            "type": "string",
+                            "maxLength": 50
+                          },
+                          "label": {
+                            "type": "string",
+                            "maxLength": 100
+                          },
+                          "data_type": {
+                            "type": "string",
+                            "enum": [
+                              "string",
+                              "number",
+                              "boolean"
+                            ]
+                          },
+                          "unit": {
+                            "type": "string",
+                            "maxLength": 20,
+                            "nullable": true
+                          },
+                          "group": {
+                            "type": "string",
+                            "maxLength": 50
+                          },
+                          "is_filterable": {
+                            "type": "boolean"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "default": {
+            "$ref": "#/components/responses/DefaultError"
           }
         }
       }
@@ -308,10 +786,16 @@
   },
   "tags": [
     {
-      "name": "Products"
+      "name": "Products",
+      "description": "Товары"
     },
     {
-      "name": "Categories"
+      "name": "Categories",
+      "description": "Категории"
+    },
+    {
+      "name": "Metadata",
+      "description": "Метаданные и схемы"
     }
   ]
 }
