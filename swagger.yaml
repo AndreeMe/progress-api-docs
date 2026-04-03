@@ -3,8 +3,7 @@ info:
   title: Progress NW Catalog API
   description: API для получения товарных данных с поддержкой векторного поиска (RAG)
   version: 1.0.0
-  contact:
-    email: api@progress-nw.ru
+  contact: {}
 servers:
   - url: https://progress-nw.ru/api/v1
     description: Production

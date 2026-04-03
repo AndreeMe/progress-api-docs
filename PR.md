@@ -872,4 +872,3 @@ CREATE INDEX idx_products_status ON products(status);
 
 - **Проект:** Progress NW Catalog API
 - **Сайт:** https://progress-nw.ru/catalog
-- **Email:** api@progress-nw.ru
