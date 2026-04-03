@@ -145,7 +145,7 @@ progress-api-docs/
 
 ## Contact Information
 
-- **Email:** api@progress-nw.ru
+- **Email:** 1c@progress-nw.ru
 - **Repository:** https://github.com/AndreeMe/progress-api-docs
 - **Documentation:** https://andreeme.github.io/progress-api-docs/
 
